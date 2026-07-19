@@ -23,8 +23,11 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Fetch lists from config.yaml
+      - name: Fetch lists
         run: python pack.py --output-dir "$RUNNER_TEMP/dist"
+
+      - name: Copy
+        run: cp -r black_list "$RUNNER_TEMP/black_list"
 
       - name: Publish to release branch
         env:
@@ -43,6 +46,7 @@ jobs:
 
           find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
           cp -r "$RUNNER_TEMP/dist"/. .
+          cp -r "$RUNNER_TEMP/black_list" ./black_list
 
           git add -A
           if git diff --cached --quiet; then
