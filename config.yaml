@@ -1,0 +1,224 @@
+log:
+  level: info
+
+plugins:
+  - tag: cache
+    type: cache
+    args:
+      size: 10240
+      lazy_cache_ttl: 86400
+      dump_file: ./cache.dump
+      # (实验性) 自动保存间隔。单位秒。默认 600。
+      # 如果距离上次 dump 有 1024 次更新，则自动保存。
+      dump_interval: 600
+
+  # 本地DNS递归
+  - tag: forward_local_dns
+    type: forward
+    args:
+      concurrent: 1
+      upstreams:
+        - addr: udp://183.60.82.98
+        - addr: udp://183.60.83.19
+        - addr: udp://119.29.29.29
+
+  # Ali DNS递归
+  - tag: forward_ali_dns
+    type: forward
+    args:
+      concurrent: 1
+      upstreams:
+        - addr: udp://223.5.5.5
+        - addr: udp://223.6.6.6
+
+  # Bytedance DNS递归
+  - tag: forward_bytedance_dns
+    type: forward
+    args:
+      concurrent: 2
+      upstreams:
+        - addr: udp://180.184.1.1
+        - addr: udp://180.184.2.2
+
+  # 境外DNS递归
+  - tag: forward_oversea_dns
+    type: forward
+    args:
+      concurrent: 1
+      upstreams:
+        - tag: cloudflare_doh
+          addr: "https://1.1.1.1/dns-query"
+          enable_pipeline: true
+
+  # CDN优选
+  - tag: prefer_cloudflare_ip
+    type: redirect
+    args:
+      rules:
+        - "keyword: mirror.apad.pro"
+
+  # CN IP
+  - tag: "cn_ip"
+    type: "ip_set"
+    args:
+      files:
+        - /etc/mosdns/cn_list/china_ip_list.txt
+        # https://cdn.jsdelivr.net/gh/17mon/china_ip_list/china_ip_list.txt
+
+  # Cloudflare IP
+  - tag: cloudflare_ip
+    type: ip_set
+    args:
+      ips: 
+        - "173.245.48.0/20"
+        - "103.21.244.0/22"
+        - "103.22.200.0/22"
+        - "103.31.4.0/22"
+        - "141.101.64.0/18"
+        - "108.162.192.0/18"
+        - "190.93.240.0/20"
+        - "188.114.96.0/20"
+        - "197.234.240.0/22"
+        - "198.41.128.0/17"
+        - "162.158.0.0/15"
+        - "104.16.0.0/12"
+        - "172.64.0.0/17"
+        - "172.64.128.0/18"
+        - "172.64.192.0/19"
+        - "172.64.224.0/22"
+        - "172.64.229.0/24"
+        - "172.64.230.0/23"
+        - "172.64.232.0/21"
+        - "172.64.240.0/21"
+        - "172.64.248.0/21"
+        - "172.65.0.0/16"
+        - "172.66.0.0/16"
+        - "172.67.0.0/16"
+        - "131.0.72.0/22"
+
+  # 阿里云域名列表
+  - tag: ali_list
+    type: domain_set
+    args:
+      files:
+        - /etc/mosdns/cn_list/ali-list.txt
+      exps:
+        - "domain:apad.pro"
+        - "keyword:aliyun"
+
+  # 境内垃圾域名列表
+  - tag: cn_rubbish_list
+    type: domain_set
+    args:
+      exps:
+        - "domain:10000.mt.cn.iot.dreame.tech"
+
+  # 境内域名列表
+  - tag: cn_list
+    type: domain_set
+    args:
+      files:
+        - /etc/mosdns/cn_list/china-list.txt
+        # https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/china-list.txt
+        - /etc/mosdns/cn_list/apple-cn.txt
+        # https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/apple-cn.txt
+        - /etc/mosdns/cn_list/google-cn.txt
+        # https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/google-cn.txt
+      exps:
+        - "keyword:org.cn"
+        - "keyword:gov.cn"
+        - "keyword:edu.cn"
+        - "keyword:mil.cn"
+        - "keyword:com.cn"
+        - "keyword:net.cn"
+
+  # Anti gfw域名列表
+  - tag: gfw_list
+    type: domain_set
+    args:
+      files:
+        - /etc/mosdns/gfw.txt
+        # https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/gfw.txt
+
+  # 黑名单域名列表
+  - tag: black_list
+    type: domain_set
+    args:
+      files:
+        - /etc/mosdns/black_list/reject-list.txt
+        # https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/reject-list.txt
+        - /etc/mosdns/black_list/AWAvenue-Ads-Rule-Mosdns_v5.txt
+        # https://cdn.jsdelivr.net/gh/TG-Twilight/AWAvenue-Ads-Rule@main/Filters/AWAvenue-Ads-Rule-Mosdns_v5.txt
+      exps:
+        - "keyword:pcdn"
+        - "keyword:httpdns"
+        - "keyword:doh"
+        - "keyword:adobe"
+        - "keyword:autodesk"
+        - "domain:alidns.com"
+
+  - tag: prefer_cloudflare
+    type: sequence
+    args:
+      - exec: $prefer_cloudflare_ip
+      - exec: $forward_local_dns
+      - matches: has_resp
+        exec: accept
+  
+  - tag: main
+    type: sequence
+    args:
+      # Black list
+      - matches: qname $black_list
+        exec: black_hole 127.0.0.1
+
+      - exec: prefer_ipv4
+      - exec: ecs 119.29.29.29
+
+      # Aliyun list
+      - matches: qname $ali_list
+        exec: $forward_ali_dns
+      - matches: has_resp
+        exec: accept
+
+      # CN list
+      - matches: qname $cn_list
+        exec: $forward_local_dns
+      - matches: "resp_ip $cloudflare_ip"
+        exec: $prefer_cloudflare
+      - matches: has_resp
+        exec: accept
+
+      # Anti gfw
+      - matches: qname $gfw_list
+        exec: $forward_oversea_dns
+      - matches: "resp_ip $cloudflare_ip"
+        exec: $prefer_cloudflare
+      - matches: has_resp
+        exec: accept
+
+      # Other list
+      - exec: $forward_local_dns
+      - matches: "resp_ip $cn_ip"
+        exec: accept
+      - exec: $forward_oversea_dns
+      - matches: "resp_ip $cloudflare_ip"
+        exec: $prefer_cloudflare
+      - matches: has_resp
+        exec: accept
+
+  - tag: udp_server
+    type: udp_server
+    args:
+      entry: main
+      listen: :53
+
+  - tag: ""
+    type: "http_server"
+    args:
+      entries:                 # []extry
+        - path: /dns-query     # 本路径执行   
+          exec: main # 可执行插件的 tag。  
+      src_ip_header: "X-Forwarded-For"  # 从 HTTP 头获取用户 IP。
+      listen: 0.0.0.0:80  # 监听地址。
+      idle_timeout: 10       # 空连接超时。单位秒。默认 30。

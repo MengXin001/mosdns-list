@@ -1,0 +1,54 @@
+name: Pack Filter Lists
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '0 12 */5 * *'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Auto update lists
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Fetch lists from config.yaml
+        run: python pack.py --output-dir "$RUNNER_TEMP/dist"
+
+      - name: Publish to release branch
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          set -e
+
+          if git fetch origin release; then
+            git checkout -B release origin/release
+          else
+            git checkout --orphan release
+          fi
+
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          cp -r "$RUNNER_TEMP/dist"/. .
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git commit -m "chore: update lists"
+          git push origin release
