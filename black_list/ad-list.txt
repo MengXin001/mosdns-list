@@ -69,6 +69,7 @@ domain:check.bt.cn
 domain:cls.tencentcs.com
 domain:cnuspider.yuanshen.com
 domain:cnzz.com
+domain:collapsar.amap.com
 domain:collect.gmcc.net
 domain:collector.github.com
 domain:console-base.log-global.aliyuncs.com
